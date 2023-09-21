@@ -1,57 +1,88 @@
+// Import React and Component
 import React, { useEffect, useState } from "react";
 import {
   Modal,
-  Button,
   View,
   Text,
   SafeAreaView,
   StyleSheet,
   Dimensions,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import app from '../firebase';
 import { getDatabase, ref, onValue } from "firebase/database";
 
+//---------- components ---------
 const App = () => {
-
+  //---------- state, redux state, veriable and hooks
   const [showModal, setShowModal] = useState<boolean>(false);
-  const [showCorrectPopup, setShowCorrectPopup] = useState<boolean>(false);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [showCorrectMessage, setShowCorrectMessage] = useState<boolean>(false);
-  const [data1, setData1] = useState<object[]>([]);
-  const [data2, setData2] = useState<object[]>([]);
+  const [questions, setQuestions] = useState<object[]>([]);
+  const [answers, setAnswers] = useState<object[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
+
+
+  //---------- life cycles section
+  useEffect(() => {
+    const db = getDatabase(app);
+    const questionsRef = ref(db, 'questions');
+    const answersRef = ref(db, 'answers');
+    console.log("receiving Data");
+    onValue(questionsRef, (snapshot) => {
+      let questionsData = snapshot.val();
+      setQuestions(questionsData);
+      console.log('Received questions data:');
+      console.log(questionsData);
+    });
+    onValue(answersRef, (snapshot) => {
+      let answersData = snapshot.val();
+      setAnswers(answersData);
+      console.log('Received answers data:');
+      console.log(answersData);
+    });
+  }, []);
+
+
+  //---------- helpers : other and users action
   const handleSelectAnswer = (answer: string) => {
     setSelectedAnswer(answer);
   };
-
-  useEffect(() => {
-    const db = getDatabase(app);
-    const english = ref(db, 'english');
-    const german = ref(db, 'german');
-    console.log("receiving Data");
-    onValue(english, (snapshot) => {
-      let english = snapshot.val();
-      setData1(english)
-      console.log('Testing');
-      console.log(english);
-    })
-    onValue(german, (snapshot) => {
-      let german = snapshot.val();
-      setData2(german)
-      console.log('Testing');
-      console.log(german);
-    })
-
-  }, [])
-
   const handleContinue = () => {
-    if (selectedAnswer === "hause") {
-      setShowCorrectMessage(true);
+    const currentAnswer :any= answers[currentQuestionIndex];
+
+    if (selectedAnswer === currentAnswer.correctAnswer) {
+      // Show a "Correct" alert for a correct answer
+      Alert.alert("Correct", "Your answer is correct!", [
+        { text: "OK", onPress: () => {} },
+      ]);
+
+      // Load the next question
+      const nextAnswerId = currentAnswer.nextQuestionId;
+      if (nextAnswerId !== null) {
+        const nextAnswerIndex :any =  answers.findIndex((answer:any) => answer.id === nextAnswerId);
+        setCurrentQuestionIndex(nextAnswerIndex);
+      }
+      setSelectedAnswer(null);
     } else {
-      setShowCorrectMessage(false);
+      // Show a "Wrong Answer" alert for a wrong answer
+      Alert.alert("Wrong Answer", "Your answer is incorrect. Please try again.", [
+        { text: "OK", onPress: () => {} },
+      ]);
+      setSelectedAnswer(null); // Clear the selected answer
     }
-    setShowModal(!showModal);
+    if (currentQuestionIndex >= questions.length - 1) {
+      // Check if it's the last question
+      setShowModal(false); // Close the modal when the quiz is completed
+      setCurrentQuestionIndex(0); // Reset the question index for the next quiz
+      // Show an alert when all questions have been successfully answered
+      Alert.alert("Congratulations", "You have completed all questions!", [
+        { text: "OK", onPress: () => {} },
+      ]);
+    }
   };
+
+  //---------- main view
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
@@ -69,39 +100,37 @@ const App = () => {
               <Text style={styles.maintitle}>Fill in the missing word</Text>
             </View>
             <View>
-            {data1.map((item :object, index) => (
-                <Text style={styles.heading1} key={index}>
-                  {item.word1} <Text style={styles.heading2}>{item.word2} </Text>
-                  <Text>{item.word3} </Text>
-                  <Text>
-                    {item.word4}
+              {questions.length > 0 && currentQuestionIndex < questions.length && (
+                <Text style={styles.heading1}>
+                  {questions[currentQuestionIndex].word1}{" "}
+                  <Text style={styles.heading2}>
+                    {questions[currentQuestionIndex].word2}{" "}
                   </Text>
+                  {questions[currentQuestionIndex].word3}{" "}
+                  {questions[currentQuestionIndex].word4}
                 </Text>
-              ))}
+              )}
             </View>
             <View>
-              <Text style={styles.question}>
-                <Text style={styles.word1}>Das </Text>
-                <Text style={styles.word2}>{selectedAnswer || "______"}</Text>
-                <Text style={styles.word3}> ist </Text>
-                <Text style={styles.word4}>Klein</Text>
-              </Text>
+              {answers.length > 0 && currentQuestionIndex < answers.length && (
+                <Text style={styles.heading1}>
+                  {answers[currentQuestionIndex].word1}{" "}
+                  <Text style={styles.word2}>{selectedAnswer || "______"}</Text>
+                  <Text> {answers[currentQuestionIndex].word3}{" "}</Text>
+                  {answers[currentQuestionIndex].word4}
+                </Text>
+              )}
             </View>
-            {showCorrectMessage && (
-              <View>
-                <Text style={styles.correctMessage}>Correct!</Text>
-              </View>
-            )}
             <View style={styles.choose1}>
               <View style={styles.choose2}>
-                {choose.map((item, index) => {
+                {answers.map((item :any, index) => {
                   return (
                     <TouchableOpacity
                       style={styles.choose}
                       key={index}
-                      onPress={() => handleSelectAnswer(item.name)}
+                      onPress={() => handleSelectAnswer(item.correctAnswer)}
                     >
-                      <Text style={styles.choosebutton}>{item.name}</Text>
+                      <Text style={styles.choosebutton}>{item.correctAnswer}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -129,7 +158,7 @@ const App = () => {
 
 const screenHeight = Dimensions.get("window").height;
 
-const styles = StyleSheet.create({
+  const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: "center",
@@ -228,23 +257,5 @@ const styles = StyleSheet.create({
   },
 });
 
-const choose = [
-  {
-    id: "1",
-    name: "folgen",
-  },
-  {
-    id: "2",
-    name: "schaf",
-  },
-  {
-    id: "3",
-    name: "bereiden",
-  },
-  {
-    id: "4",
-    name: "hause",
-  },
-];
 
 export default App;
